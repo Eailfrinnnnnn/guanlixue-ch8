@@ -1660,7 +1660,9 @@ body.hl-editing #content [data-hlb]:focus{outline:2px solid #a5813c;background:r
   }
 
   /* ---------------- 云端同步 ---------------- */
-  function apiURL(q) { return '/.netlify/functions/marks?doc=' + encodeURIComponent(DOC) + (q || ''); }
+  var CLOUD_BIN = 'ff808181a09d98f701a1c129c1e0723b';
+  var CLOUD_URL = 'https://api.restful-api.dev/objects/' + CLOUD_BIN;
+  function apiURL() { return CLOUD_URL; }
 
   function setStatus(txt, cls) {
     var el = document.querySelector('.hl-tool .hl-status');
@@ -1682,10 +1684,16 @@ body.hl-editing #content [data-hlb]:focus{outline:2px solid #a5813c;background:r
 
   function pushCloud() {
     setStatus('同步中…', 'wait');
-    return fetch(apiURL(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload()) })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j || !j.ok) throw new Error('bad');
+    return fetch(apiURL(), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'guanli-ch8-marks', data: payload() })
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('bad');
+        return true;
+      })
+      .then(function () {
         cloudState = 'ok';
         lastAt = Date.now();
         dirty = false;
@@ -1707,15 +1715,19 @@ body.hl-editing #content [data-hlb]:focus{outline:2px solid #a5813c;background:r
 
   function pullCloud() {
     setStatus('读取云端…', 'wait');
-    fetch(apiURL(), { method: 'GET' })
-      .then(function (r) { return r.json(); })
+    fetch(apiURL(), { method: 'GET', cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('bad');
+        return r.json();
+      })
       .then(function (j) {
-        if (!j || !j.ok) throw new Error('bad');
         cloudState = 'ok';
-        var d = j.data;
-        if (!d) { setStatus('云端暂无记录', 'wait'); return; }
-        var obj = typeof d === 'string' ? JSON.parse(d) : d;
-        if (!obj || !obj.at || obj.at <= lastAt) {
+        var obj = j && j.data ? j.data : null;
+        if (typeof obj === 'string') {
+          try { obj = JSON.parse(obj); } catch (e) { obj = null; }
+        }
+        if (!obj || !obj.items) { setStatus('云端暂无记录', 'wait'); return; }
+        if (!obj.at || obj.at <= lastAt) {
           if (items.length && lastAt > ((obj && obj.at) || 0)) {
             dirty = true;
             syncBtns();
